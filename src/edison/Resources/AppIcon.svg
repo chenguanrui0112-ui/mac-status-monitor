@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f7f7"/>
+      <stop offset="1" stop-color="#cfcfcf"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#000" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+  <rect x="72" y="56" width="880" height="880" rx="210" fill="url(#glass)" filter="url(#shadow)"/>
+  <rect x="92" y="76" width="840" height="840" rx="192" fill="none" stroke="#fff" stroke-opacity="0.7" stroke-width="8"/>
+  <path d="M371 266 C410 352 614 352 653 266 L809 359 L872 543 L721 611 L682 516 L682 771 L342 771 L342 516 L303 611 L152 543 L215 359 Z"
+        fill="none" stroke="#171717" stroke-width="34" stroke-linejoin="round" stroke-linecap="round"/>
+  <text x="512" y="620" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif"
+        font-size="210" font-weight="750" letter-spacing="-18" fill="#171717">10</text>
+</svg>
+
