@@ -2,9 +2,9 @@
 
 一个 macOS 菜单栏状态监控应用。
 
-![浅色模式](demo-light.png)
+![浅色模式](assets/demo-light.png)
 
-![深色模式](demo-dark.png)
+![深色模式](assets/demo-dark.png)
 
 ## 功能
 
