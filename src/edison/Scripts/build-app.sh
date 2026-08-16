@@ -80,6 +80,9 @@ done
     "ic09=$icon_root/AppIcon.iconset/icon_512x512.png" \
     "ic10=$icon_root/AppIcon.iconset/icon_512x512@2x.png"
 
+# Cloud-synced working folders can add Finder/FileProvider metadata to files
+# copied into the bundle. Clear it before signing, then sign the final copy.
+/usr/bin/xattr -cr "$stage_root/edison.app" 2>/dev/null || true
 /usr/bin/codesign --force --deep --sign - "$stage_root/edison.app"
 
 rm -rf "$app_path"
@@ -87,8 +90,7 @@ rm -rf "$app_path"
 # Some synchronized Documents folders attach Finder/FileProvider metadata to
 # the copied bundle. Those extended attributes invalidate strict code-signature
 # verification, so the deliverable is normalized after the copy.
-/usr/bin/xattr -rc "$app_path" 2>/dev/null || true
-/usr/bin/xattr -d com.apple.FinderInfo "$app_path" 2>/dev/null || true
-/usr/bin/xattr -d 'com.apple.fileprovider.fpfs#P' "$app_path" 2>/dev/null || true
+/usr/bin/xattr -cr "$app_path" 2>/dev/null || true
+/usr/bin/codesign --force --deep --sign - "$app_path"
 
 echo "$app_path"

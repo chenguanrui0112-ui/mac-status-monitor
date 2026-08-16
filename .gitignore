@@ -1,0 +1,9 @@
+.DS_Store
+
+# SwiftPM build products and local module caches.
+src/edison/.build/
+
+# Locally packaged applications and release archives.
+outputs/*.app/
+outputs/*.app.pre-fix-backup/
+outputs/*.zip

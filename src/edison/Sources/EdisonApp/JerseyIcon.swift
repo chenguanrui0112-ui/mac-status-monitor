@@ -14,7 +14,7 @@ struct EdisonMarkView: View {
 
     var body: some View {
         let resource = useWhite ? "menubar-mark" : "edison-mark-black"
-        if let url = Bundle.module.url(forResource: resource, withExtension: "png"),
+        if let url = EdisonResources.url(forResource: resource, withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             Image(nsImage: image)
                 .resizable()
@@ -29,7 +29,7 @@ struct EdisonMarkView: View {
 
 private enum JerseyMenuBarIconImage {
     static let image: NSImage = {
-        guard let url = Bundle.module.url(forResource: "menubar-mark", withExtension: "png"),
+        guard let url = EdisonResources.url(forResource: "menubar-mark", withExtension: "png"),
               let image = NSImage(contentsOf: url) else {
             return NSImage(size: NSSize(width: 22, height: 18))
         }
@@ -37,6 +37,20 @@ private enum JerseyMenuBarIconImage {
         image.isTemplate = true
         return image
     }()
+}
+
+/// The executable is assembled into a standalone `.app` by `build-app.sh`.
+/// SwiftPM's generated `Bundle.module` accessor assumes SwiftPM's own bundle
+/// layout and traps if that bundle cannot be created during a cold launch.
+/// Resolve the resource bundle from the app package instead, matching the
+/// layout copied by the packaging script.
+private enum EdisonResources {
+    static func url(forResource name: String, withExtension fileExtension: String) -> URL? {
+        Bundle.main.resourceURL?
+            .appendingPathComponent("edison_EdisonApp.bundle", isDirectory: true)
+            .appendingPathComponent(name)
+            .appendingPathExtension(fileExtension)
+    }
 }
 
 struct JerseyShape: Shape {
