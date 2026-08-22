@@ -65,6 +65,25 @@ struct CodexQuotaSnapshot: Equatable, Sendable {
     var message: String?
 }
 
+struct YouTuQuotaSnapshot: Equatable, Sendable {
+    var usedBytes: Int64?
+    var totalBytes: Int64?
+    var expiresAt: Date?
+    var cacheUpdatedAt: Date?
+    var readAt: Date?
+    var message: String?
+
+    var remainingBytes: Int64? {
+        guard let usedBytes, let totalBytes else { return nil }
+        return max(0, totalBytes - usedBytes)
+    }
+
+    var remainingPercent: Double? {
+        guard let remainingBytes, let totalBytes, totalBytes > 0 else { return nil }
+        return min(100, max(0, Double(remainingBytes) / Double(totalBytes) * 100))
+    }
+}
+
 enum TodoAccessState: Equatable, Sendable {
     case notDetermined
     case authorized

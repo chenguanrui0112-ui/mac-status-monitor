@@ -13,8 +13,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var gpuHistory: [MetricPoint] = []
     @Published private(set) var airPods = AirPodsSnapshot(message: "等待连接 AirPods")
     @Published private(set) var codexQuota = CodexQuotaSnapshot(message: "尚未刷新")
+    @Published private(set) var youTuQuota = YouTuQuotaSnapshot(message: "尚未刷新")
     @Published private(set) var todos = TodoSnapshot(message: "等待连接提醒事项")
     @Published private(set) var isRefreshingCodex = false
+    @Published private(set) var isRefreshingYouTu = false
     @Published private(set) var isWorkingOnTodos = false
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginMessage: String?
@@ -23,10 +25,12 @@ final class AppModel: ObservableObject {
     private let metricsProvider = SystemMetricsProvider()
     private let airPodsProvider = AirPodsProvider()
     private let codexProvider = CodexQuotaProvider()
+    private let youTuProvider = YouTuQuotaProvider()
     private let todoProvider = TodoProvider()
     private var metricsTask: Task<Void, Never>?
     private var airPodsTask: Task<Void, Never>?
     private var codexTask: Task<Void, Never>?
+    private var youTuTask: Task<Void, Never>?
     private var todoTask: Task<Void, Never>?
     private var panelIsVisible = false
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -55,6 +59,7 @@ final class AppModel: ObservableObject {
         startMetricsSampling()
         startAirPodsSampling()
         refreshCodexIfNeeded()
+        refreshYouTuIfNeeded()
         refreshTodos()
     }
 
@@ -70,7 +75,10 @@ final class AppModel: ObservableObject {
         airPodsTask = nil
         codexTask?.cancel()
         codexTask = nil
+        youTuTask?.cancel()
+        youTuTask = nil
         isRefreshingCodex = false
+        isRefreshingYouTu = false
     }
 
     func refreshCodex() {
@@ -83,6 +91,19 @@ final class AppModel: ObservableObject {
             self.applyCodexSnapshot(snapshot)
             self.isRefreshingCodex = false
             self.codexTask = nil
+        }
+    }
+
+    func refreshYouTu() {
+        youTuTask?.cancel()
+        isRefreshingYouTu = true
+        youTuTask = Task { [weak self] in
+            guard let self else { return }
+            let snapshot = await self.youTuProvider.snapshot()
+            guard !Task.isCancelled else { return }
+            self.applyYouTuSnapshot(snapshot)
+            self.isRefreshingYouTu = false
+            self.youTuTask = nil
         }
     }
 
@@ -177,6 +198,14 @@ final class AppModel: ObservableObject {
         refreshCodex()
     }
 
+    private func refreshYouTuIfNeeded() {
+        if let readAt = youTuQuota.readAt,
+           Date().timeIntervalSince(readAt) < 60 {
+            return
+        }
+        refreshYouTu()
+    }
+
     private func refreshTodos() {
         performTodoOperation { [todoProvider] in
             await todoProvider.snapshot()
@@ -206,6 +235,16 @@ final class AppModel: ObservableObject {
 
         // 查询暂时失败时，保留最后一次成功的窗口和时间，避免面板突然变成空白。
         codexQuota.message = snapshot.message ?? "Codex 用量暂不可用"
+    }
+
+    private func applyYouTuSnapshot(_ snapshot: YouTuQuotaSnapshot) {
+        guard snapshot.totalBytes == nil, youTuQuota.totalBytes != nil else {
+            youTuQuota = snapshot
+            return
+        }
+
+        // 本地缓存短暂被 YouTu 占用时，保留最近一次成功额度。
+        youTuQuota.message = snapshot.message ?? "YouTu 用量暂不可用"
     }
 
     private func appendMetricHistory(at date: Date) {
@@ -311,6 +350,7 @@ final class AppModel: ObservableObject {
         guard panelIsVisible else { return }
         startAirPodsSampling()
         refreshCodexIfNeeded()
+        refreshYouTuIfNeeded()
         refreshTodos()
     }
 }

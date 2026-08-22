@@ -58,6 +58,8 @@ struct DashboardView: View {
 
             Spacer()
 
+            HeaderTemperatureView(metrics: model.temperature)
+
             Button {
                 withAnimation(.easeOut(duration: 0.16)) {
                     model.showsSettings.toggle()
@@ -79,7 +81,13 @@ struct DashboardView: View {
                 LazyVGrid(columns: columns, spacing: 14) {
                     CPUCard(metrics: model.cpu, history: model.cpuHistory)
                     GPUCard(metrics: model.gpu, history: model.gpuHistory)
-                    TemperatureCard(metrics: model.temperature)
+                    TodoCard(
+                        snapshot: model.todos,
+                        isWorking: model.isWorkingOnTodos,
+                        requestAccess: model.requestTodoAccess,
+                        add: model.addTodo,
+                        complete: model.completeTodo
+                    )
                     AirPodsCard(snapshot: model.airPods)
                 }
                 LazyVGrid(columns: columns, spacing: 14) {
@@ -88,12 +96,10 @@ struct DashboardView: View {
                         isRefreshing: model.isRefreshingCodex,
                         refresh: model.refreshCodex
                     )
-                    TodoCard(
-                        snapshot: model.todos,
-                        isWorking: model.isWorkingOnTodos,
-                        requestAccess: model.requestTodoAccess,
-                        add: model.addTodo,
-                        complete: model.completeTodo
+                    YouTuQuotaCard(
+                        snapshot: model.youTuQuota,
+                        isRefreshing: model.isRefreshingYouTu,
+                        refresh: model.refreshYouTu
                     )
                 }
             }
@@ -137,6 +143,31 @@ private struct CardHeader: View {
                     .monospacedDigit()
             }
         }
+    }
+}
+
+private struct HeaderTemperatureView: View {
+    let metrics: TemperatureMetrics
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "thermometer.medium")
+            Text(valueText)
+                .monospacedDigit()
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 11)
+        .frame(height: 30)
+        .glassEffect(.regular, in: Capsule())
+        .help("芯片温度 · 系统热状态：\(metrics.status.rawValue)")
+    }
+
+    private var valueText: String {
+        if let celsius = metrics.celsius {
+            return "\(celsius.formatted(.number.precision(.fractionLength(1)))) °C"
+        }
+        return metrics.status.rawValue
     }
 }
 
@@ -184,43 +215,6 @@ private struct GPUCard: View {
                     LegendValue(color: .metricTeal, title: "Tiler", value: metrics.tiler)
                 }
                 .opacity(metrics.isAvailable ? 1 : 0.45)
-            }
-        }
-    }
-}
-
-private struct TemperatureCard: View {
-    let metrics: TemperatureMetrics
-
-    var body: some View {
-        GlassCard(height: 172) {
-            VStack(alignment: .leading, spacing: 12) {
-                CardHeader(icon: "thermometer.medium", title: "温度")
-                Spacer(minLength: 0)
-                if let celsius = metrics.celsius {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(celsius.formatted(.number.precision(.fractionLength(1))))
-                            .font(.system(size: 38, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        Text("°C")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("芯片最高温度")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("热状态")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(metrics.status.rawValue)
-                            .font(.system(size: 31, weight: .semibold, design: .rounded))
-                    }
-                }
-                Text("系统热状态：\(metrics.status.rawValue)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -445,6 +439,79 @@ private struct QuotaWindowView: View {
     }
 }
 
+private struct YouTuQuotaCard: View {
+    let snapshot: YouTuQuotaSnapshot
+    let isRefreshing: Bool
+    let refresh: () -> Void
+
+    var body: some View {
+        GlassCard(height: 166) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .foregroundStyle(.purple)
+                    Text("YouTu")
+                        .font(.title3.weight(.medium))
+                    Spacer()
+                    Button(action: refresh) {
+                        Group {
+                            if isRefreshing {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                        }
+                        .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRefreshing)
+                    .help("刷新 YouTu 本地额度")
+                }
+
+                if let usedBytes = snapshot.usedBytes,
+                   let totalBytes = snapshot.totalBytes,
+                   let remainingBytes = snapshot.remainingBytes,
+                   let remainingPercent = snapshot.remainingPercent {
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("剩余 \(quotaText(remainingBytes)) / \(quotaText(totalBytes))")
+                                .font(.subheadline.weight(.medium))
+                                .monospacedDigit()
+                            Spacer()
+                            Text("\(percent(remainingPercent))%")
+                                .font(.title3.weight(.semibold).monospacedDigit())
+                        }
+                        ProgressView(value: remainingPercent, total: 100)
+                            .tint(.purple)
+                        HStack(spacing: 10) {
+                            Text("已用 \(quotaText(usedBytes))")
+                            Spacer()
+                            if let expiresAt = snapshot.expiresAt {
+                                Text("到期 \(quotaDateText(expiresAt))")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    }
+                } else {
+                    Text(snapshot.message ?? "暂不可用")
+                        .foregroundStyle(.secondary)
+                        .frame(maxHeight: .infinity, alignment: .center)
+                }
+
+                if let cacheUpdatedAt = snapshot.cacheUpdatedAt {
+                    Text(youTuStatusText(updatedAt: cacheUpdatedAt, message: snapshot.message))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+}
+
 private struct TodoCard: View {
     let snapshot: TodoSnapshot
     let isWorking: Bool
@@ -457,7 +524,7 @@ private struct TodoCard: View {
     @FocusState private var isTitleFocused: Bool
 
     var body: some View {
-        GlassCard(height: 166) {
+        GlassCard(height: 172) {
             VStack(alignment: .leading, spacing: 10) {
                 header
 
@@ -527,11 +594,12 @@ private struct TodoCard: View {
     }
 
     private func permissionContent(message: String, showsButton: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .center, spacing: 9) {
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+                .multilineTextAlignment(.center)
             if showsButton {
                 Button(action: requestAccess) {
                     Label("连接提醒事项", systemImage: "checklist")
@@ -541,7 +609,7 @@ private struct TodoCard: View {
                 .disabled(isWorking)
             }
         }
-        .frame(maxHeight: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     @ViewBuilder
@@ -620,7 +688,7 @@ private struct TodoRow: View {
         }
         .buttonStyle(.plain)
         .disabled(isWorking)
-        .frame(minHeight: 20)
+        .frame(maxWidth: .infinity, minHeight: 20)
         .help("完成“\(item.title)”")
     }
 }
@@ -741,6 +809,34 @@ private func resetText(_ date: Date) -> String {
             .locale(Locale(identifier: "zh_CN"))
     )
     return "\(relative)重置 · \(absolute)"
+}
+
+private func quotaText(_ bytes: Int64) -> String {
+    let gibibytes = Double(bytes) / 1_073_741_824
+    return "\(gibibytes.formatted(.number.precision(.fractionLength(2)))) GB"
+}
+
+private func quotaDateText(_ date: Date) -> String {
+    date.formatted(
+        Date.FormatStyle()
+            .year()
+            .month(.twoDigits)
+            .day(.twoDigits)
+            .locale(Locale(identifier: "zh_CN"))
+    )
+}
+
+private func youTuStatusText(updatedAt: Date, message: String?) -> String {
+    let date = updatedAt.formatted(
+        Date.FormatStyle()
+            .hour(.twoDigits(amPM: .omitted))
+            .minute(.twoDigits)
+            .locale(Locale(identifier: "zh_CN"))
+    )
+    if let message, !message.isEmpty {
+        return "本地缓存 \(date) · \(message)"
+    }
+    return "本地缓存更新于 \(date)"
 }
 
 private func todoDueText(_ item: TodoItem) -> String? {
