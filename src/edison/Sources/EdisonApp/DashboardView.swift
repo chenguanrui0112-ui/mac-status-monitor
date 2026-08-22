@@ -82,11 +82,20 @@ struct DashboardView: View {
                     TemperatureCard(metrics: model.temperature)
                     AirPodsCard(snapshot: model.airPods)
                 }
-                CodexCard(
-                    snapshot: model.codexQuota,
-                    isRefreshing: model.isRefreshingCodex,
-                    refresh: model.refreshCodex
-                )
+                LazyVGrid(columns: columns, spacing: 14) {
+                    CodexCard(
+                        snapshot: model.codexQuota,
+                        isRefreshing: model.isRefreshingCodex,
+                        refresh: model.refreshCodex
+                    )
+                    TodoCard(
+                        snapshot: model.todos,
+                        isWorking: model.isWorkingOnTodos,
+                        requestAccess: model.requestTodoAccess,
+                        add: model.addTodo,
+                        complete: model.completeTodo
+                    )
+                }
             }
         }
     }
@@ -436,6 +445,186 @@ private struct QuotaWindowView: View {
     }
 }
 
+private struct TodoCard: View {
+    let snapshot: TodoSnapshot
+    let isWorking: Bool
+    let requestAccess: () -> Void
+    let add: (String) -> Void
+    let complete: (String) -> Void
+
+    @State private var isAdding = false
+    @State private var draftTitle = ""
+    @FocusState private var isTitleFocused: Bool
+
+    var body: some View {
+        GlassCard(height: 166) {
+            VStack(alignment: .leading, spacing: 10) {
+                header
+
+                switch snapshot.access {
+                case .notDetermined:
+                    permissionContent(
+                        message: snapshot.message ?? "连接提醒事项后显示待办",
+                        showsButton: true
+                    )
+                case .denied:
+                    permissionContent(
+                        message: snapshot.message ?? "请在系统设置中允许提醒事项访问",
+                        showsButton: false
+                    )
+                case .restricted:
+                    permissionContent(
+                        message: snapshot.message ?? "系统限制了提醒事项访问",
+                        showsButton: false
+                    )
+                case .unavailable:
+                    permissionContent(
+                        message: snapshot.message ?? "提醒事项暂不可用",
+                        showsButton: false
+                    )
+                case .authorized:
+                    authorizedContent
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .foregroundStyle(.secondary)
+            Text("待办事项")
+                .font(.title3.weight(.medium))
+            Spacer()
+            if snapshot.access == .authorized {
+                Text("\(snapshot.totalIncomplete) 项")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Button {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        isAdding.toggle()
+                    }
+                    if isAdding {
+                        isTitleFocused = true
+                    } else {
+                        draftTitle = ""
+                    }
+                } label: {
+                    Image(systemName: isAdding ? "xmark.circle.fill" : "plus.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .disabled(isWorking)
+                .help(isAdding ? "取消新建" : "新建待办")
+            } else if isWorking {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private func permissionContent(message: String, showsButton: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            if showsButton {
+                Button(action: requestAccess) {
+                    Label("连接提醒事项", systemImage: "checklist")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isWorking)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private var authorizedContent: some View {
+        if snapshot.items.isEmpty && !isAdding {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("暂时没有待办事项")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        } else {
+            VStack(spacing: 8) {
+                if isAdding {
+                    HStack(spacing: 7) {
+                        TextField("输入待办事项", text: $draftTitle)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($isTitleFocused)
+                            .onSubmit(saveDraft)
+                        Button(action: saveDraft) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(trimmedDraft.isEmpty || isWorking)
+                        .help("添加")
+                    }
+                }
+
+                ForEach(Array(snapshot.items.prefix(isAdding ? 2 : 3))) { item in
+                    TodoRow(item: item, isWorking: isWorking) {
+                        complete(item.id)
+                    }
+                }
+            }
+        }
+    }
+
+    private var trimmedDraft: String {
+        draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func saveDraft() {
+        guard !trimmedDraft.isEmpty, !isWorking else { return }
+        add(trimmedDraft)
+        draftTitle = ""
+        isAdding = false
+    }
+}
+
+private struct TodoRow: View {
+    let item: TodoItem
+    let isWorking: Bool
+    let complete: () -> Void
+
+    var body: some View {
+        Button(action: complete) {
+            HStack(spacing: 9) {
+                Image(systemName: "circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(item.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if let label = todoDueText(item) {
+                    Text(label)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(todoDueColor(item))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isWorking)
+        .frame(minHeight: 20)
+        .help("完成“\(item.title)”")
+    }
+}
+
 private struct LegendValue: View {
     let color: Color
     let title: String
@@ -552,6 +741,39 @@ private func resetText(_ date: Date) -> String {
             .locale(Locale(identifier: "zh_CN"))
     )
     return "\(relative)重置 · \(absolute)"
+}
+
+private func todoDueText(_ item: TodoItem) -> String? {
+    guard let dueDate = item.dueDate else { return nil }
+    if item.isOverdue() { return "逾期" }
+
+    let calendar = Calendar.current
+    if calendar.isDateInToday(dueDate) {
+        if item.dueIncludesTime {
+            return dueDate.formatted(
+                Date.FormatStyle()
+                    .hour(.twoDigits(amPM: .omitted))
+                    .minute(.twoDigits)
+                    .locale(Locale(identifier: "zh_CN"))
+            )
+        }
+        return "今天"
+    }
+    if calendar.isDateInTomorrow(dueDate) { return "明天" }
+    return dueDate.formatted(
+        Date.FormatStyle()
+            .month(.abbreviated)
+            .day()
+            .locale(Locale(identifier: "zh_CN"))
+    )
+}
+
+private func todoDueColor(_ item: TodoItem) -> Color {
+    if item.isOverdue() { return .red }
+    if let dueDate = item.dueDate, Calendar.current.isDateInToday(dueDate) {
+        return .orange
+    }
+    return .secondary
 }
 
 private func codexStatusText(updatedAt: Date, message: String?) -> String {

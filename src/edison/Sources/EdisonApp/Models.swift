@@ -65,3 +65,33 @@ struct CodexQuotaSnapshot: Equatable, Sendable {
     var message: String?
 }
 
+enum TodoAccessState: Equatable, Sendable {
+    case notDetermined
+    case authorized
+    case denied
+    case restricted
+    case unavailable
+}
+
+struct TodoItem: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let dueDate: Date?
+    let dueIncludesTime: Bool
+
+    func isOverdue(at date: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard let dueDate else { return false }
+        if dueIncludesTime {
+            return dueDate < date
+        }
+        return calendar.startOfDay(for: dueDate) < calendar.startOfDay(for: date)
+    }
+}
+
+struct TodoSnapshot: Equatable, Sendable {
+    var items: [TodoItem] = []
+    var totalIncomplete = 0
+    var access: TodoAccessState = .notDetermined
+    var updatedAt: Date?
+    var message: String?
+}

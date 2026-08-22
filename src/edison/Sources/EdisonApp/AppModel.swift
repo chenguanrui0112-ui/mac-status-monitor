@@ -13,7 +13,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var gpuHistory: [MetricPoint] = []
     @Published private(set) var airPods = AirPodsSnapshot(message: "等待连接 AirPods")
     @Published private(set) var codexQuota = CodexQuotaSnapshot(message: "尚未刷新")
+    @Published private(set) var todos = TodoSnapshot(message: "等待连接提醒事项")
     @Published private(set) var isRefreshingCodex = false
+    @Published private(set) var isWorkingOnTodos = false
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginMessage: String?
     @Published var showsSettings = false
@@ -21,9 +23,11 @@ final class AppModel: ObservableObject {
     private let metricsProvider = SystemMetricsProvider()
     private let airPodsProvider = AirPodsProvider()
     private let codexProvider = CodexQuotaProvider()
+    private let todoProvider = TodoProvider()
     private var metricsTask: Task<Void, Never>?
     private var airPodsTask: Task<Void, Never>?
     private var codexTask: Task<Void, Never>?
+    private var todoTask: Task<Void, Never>?
     private var panelIsVisible = false
     private var workspaceObservers: [NSObjectProtocol] = []
 
@@ -51,6 +55,7 @@ final class AppModel: ObservableObject {
         startMetricsSampling()
         startAirPodsSampling()
         refreshCodexIfNeeded()
+        refreshTodos()
     }
 
     func panelDidDisappear() {
@@ -78,6 +83,24 @@ final class AppModel: ObservableObject {
             self.applyCodexSnapshot(snapshot)
             self.isRefreshingCodex = false
             self.codexTask = nil
+        }
+    }
+
+    func requestTodoAccess() {
+        performTodoOperation { [todoProvider] in
+            await todoProvider.requestAccess()
+        }
+    }
+
+    func addTodo(title: String) {
+        performTodoOperation { [todoProvider] in
+            await todoProvider.add(title: title)
+        }
+    }
+
+    func completeTodo(id: String) {
+        performTodoOperation { [todoProvider] in
+            await todoProvider.complete(id: id)
         }
     }
 
@@ -152,6 +175,27 @@ final class AppModel: ObservableObject {
             return
         }
         refreshCodex()
+    }
+
+    private func refreshTodos() {
+        performTodoOperation { [todoProvider] in
+            await todoProvider.snapshot()
+        }
+    }
+
+    private func performTodoOperation(
+        _ operation: @escaping @Sendable () async -> TodoSnapshot
+    ) {
+        todoTask?.cancel()
+        isWorkingOnTodos = true
+        todoTask = Task { [weak self] in
+            guard let self else { return }
+            let snapshot = await operation()
+            guard !Task.isCancelled else { return }
+            self.todos = snapshot
+            self.isWorkingOnTodos = false
+            self.todoTask = nil
+        }
     }
 
     private func applyCodexSnapshot(_ snapshot: CodexQuotaSnapshot) {
@@ -267,5 +311,6 @@ final class AppModel: ObservableObject {
         guard panelIsVisible else { return }
         startAirPodsSampling()
         refreshCodexIfNeeded()
+        refreshTodos()
     }
 }
